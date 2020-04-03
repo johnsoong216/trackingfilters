@@ -1,2 +1,2 @@
-# simpleKalman
-An implementation of Kalman Filter
+
+An implementation of major alpha-beta-gamma filters.
