@@ -1,2 +1,2 @@
-# simpleKalman
-An implementation of Kalman Filter
+# Tracking Filters
+An implementation of common tracking filters
