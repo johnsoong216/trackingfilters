@@ -1,0 +1,2 @@
+class LinKalmanException(Exception):
+    pass
