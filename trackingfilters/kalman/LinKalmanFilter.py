@@ -10,12 +10,12 @@ class LinKalmanFilter:
         self.dimension_check(
             init_state_vec.shape,
             init_state_cov_mat.shape,
-            transition_mat.shape,
-            observation_mat.shape,
-            control_vec.shape,
-            control_mat.shape,
-            process_noise_mat.shape,
-            measure_noise_mat.shape
+            transition_mat.shape if transition_mat.ndim == 2 else transition_mat[0].shape,
+            observation_mat.shape if observation_mat.ndim == 2 else observation_mat[0].shape,
+            control_vec.shape if control_vec.ndim == 2 else control_vec[0].shape,
+            control_mat.shape if control_mat.ndim == 2 else control_mat[0].shape,
+            process_noise_mat.shape if process_noise_mat.ndim == 2 else process_noise_mat[0].shape,
+            measure_noise_mat.shape if measure_noise_mat.ndim == 2 else process_noise_mat[0].shape
         )
 
         self.cur_state_vec = init_state_vec
@@ -27,7 +27,10 @@ class LinKalmanFilter:
         self.process_noise_mat = process_noise_mat
         self.measure_noise_mat = measure_noise_mat
 
-
+        self.state_count = 0
+        self.agg_state_vec = init_state_vec.reshape(1, init_state_vec.shape[0], init_state_vec.shape[1])
+        self.agg_state_cov_mat = init_state_cov_mat.reshape(1, init_state_cov_mat.shape[0], init_state_cov_mat.shape[1])
+        self.agg_kalman_gain_mat = np.zeros(shape=(1, init_state_cov_mat.shape[0], measure_noise_mat.shape[1]))
 
 
     def extrapolate(self, cur_state_vec, cur_state_cov_mat, transition_mat, observation_mat, control_mat, control_vec, measure_noise_mat, process_noise_mat):
@@ -44,33 +47,66 @@ class LinKalmanFilter:
         next_state_cov_mat = LinKalmanFilter.cov_update(extrapolate_cov_mat, kalman_gain_mat, observation_mat, measure_noise_mat)
         return next_state_vec, next_state_cov_mat
 
-    def update(self, measure_vec):
+    def vec_update(self, measure_vec):
 
-        extrapolate_state_vec, extrapolate_cov_mat, kalman_gain_mat = self.extrapolate(
+        if measure_vec.ndim < 2 and isinstance(measure_vec[0], np.ndarray):
+            raise LinKalmanException('Please call method stepwise_update if measurements are not in 2-dimensional array format')
+        # if measure_vec[0].reshape(-1, 1) != measure_vec[0]:
+        #     raise LinKalmanException('Measure vector must be in column vector format')
+
+        for measure in measure_vec:
+            if isinstance(measure, np.ndarray):
+                measure = measure.reshape(-1, 1)
+            self.step_update(measure)
+
+
+    def step_update(self, measure_vec, cur_state_vec=None, cur_state_cov_mat=None, transition_mat=None, observation_mat=None, control_mat=None, control_vec=None, measure_noise_mat=None, process_noise_mat=None):
+
+        self.update_external_params(cur_state_vec, cur_state_cov_mat, transition_mat, observation_mat, control_mat, control_vec, measure_noise_mat, process_noise_mat)
+
+        try:
+            extrapolate_state_vec, extrapolate_cov_mat, kalman_gain_mat = self.extrapolate(
             self.cur_state_vec,
             self.cur_state_cov_mat,
-            self.transition_mat,
-            self.observation_mat,
-            self.control_mat,
-            self.control_vec,
-            self.measure_noise_mat,
-            self.process_noise_mat
-        )
+            self.transition_mat if self.transition_mat.ndim == 2 else self.transition_mat[self.state_count],
+            self.observation_mat if self.observation_mat.ndim == 2 else self.observation_mat[self.state_count],
+            self.control_mat if self.control_mat.ndim == 2 else self.control_mat[self.state_count],
+            self.control_vec if self.control_vec.ndim == 2 else self.control_vec[self.state_count],
+            self.measure_noise_mat if self.measure_noise_mat.ndim == 2 else self.measure_noise_mat[self.state_count],
+            self.process_noise_mat if self.process_noise_mat.ndim == 2 else self.process_noise_mat[self.state_count]
+            )
 
-        next_state_vec, next_state_cov_mat = self.predict(
+            next_state_vec, next_state_cov_mat = self.predict(
             extrapolate_state_vec,
             extrapolate_cov_mat,
             measure_vec,
-            self.measure_noise_mat,
+            self.measure_noise_mat if self.measure_noise_mat.ndim == 2 else self.measure_noise_mat[self.state_count],
             kalman_gain_mat,
-            self.observation_mat
-        )
+            self.observation_mat if self.observation_mat.ndim == 2 else self.observation_mat[self.state_count]
+            )
+
+        except IndexError:
+            raise LinKalmanException("List of Matrices passed in is less than the number of observations.")
+
 
         self.cur_state_vec = next_state_vec
         self.cur_state_cov_mat = next_state_cov_mat
+        self.state_count += 1
 
-        return next_state_vec, next_state_cov_mat
+        #
+        # print(self.agg_state_vec)
+        # print(next_state_vec)
+        # print(next_state_vec.reshape(1, next_state_vec.shape[0], next_state_vec.shape[1]))
 
+
+        self.agg_state_vec = np.concatenate([self.agg_state_vec, next_state_vec.reshape(1, next_state_vec.shape[0], next_state_vec.shape[1])])
+        self.agg_state_cov_mat = np.concatenate([self.agg_state_cov_mat, next_state_cov_mat.reshape(1, next_state_cov_mat.shape[0], next_state_cov_mat.shape[1])])
+        self.agg_kalman_gain_mat = np.concatenate([self.agg_kalman_gain_mat, kalman_gain_mat.reshape(1, kalman_gain_mat.shape[0], kalman_gain_mat.shape[1])])
+
+        return next_state_vec, next_state_cov_mat, kalman_gain_mat
+
+    def agg_result(self):
+        return self.agg_state_vec, self.agg_state_cov_mat, self.agg_kalman_gain_mat
 
     def dimension_check(self, init_state_vec_s,
                               init_state_cov_mat_s,
@@ -101,6 +137,34 @@ class LinKalmanFilter:
 
         if observation_mat_s[1] != init_state_vec_s[0]:
             raise LinKalmanException("Observation matrix and Init State Vector do not have consistent shape")
+
+    def update_external_params(self, cur_state_vec, cur_state_cov_mat, transition_mat, observation_mat, control_mat, control_vec, measure_noise_mat, process_noise_mat):
+
+        if any([x.dim > 2 for x in [cur_state_vec, cur_state_cov_mat, transition_mat, observation_mat, control_mat, control_vec, measure_noise_mat, process_noise_mat] if x is not None]):
+            raise LinKalmanException("Filter does not support inputting a list of matrices/vecs when doing step-wise update")
+
+        if cur_state_vec is not None:
+            self.cur_state_vec = cur_state_vec
+        if cur_state_cov_mat is not None:
+            self.cur_state_cov_mat = cur_state_cov_mat
+        if transition_mat is not None:
+            self.transition_mat = transition_mat
+        if observation_mat is not None:
+            self.observation_mat = observation_mat
+        if control_mat is not None:
+            self.control_mat = control_mat
+        if control_vec is not None:
+            self.control_vec = control_vec
+        if measure_noise_mat is not None:
+            self.measure_noise_mat = measure_noise_mat
+        if process_noise_mat is not None:
+            self.process_noise_mat = process_noise_mat
+
+    def reset(self):
+        self.state_count = 0
+        self.agg_state_vec = self.agg_state_vec[:1]
+        self.agg_state_cov_mat = self.agg_state_cov_mat[:1]
+        self.agg_kalman_gain_mat = self.agg_kalman_gain_mat[:1]
 
 
     @staticmethod
@@ -181,8 +245,6 @@ class LinKalmanFilter:
     def gen_transition_control_mat(sys_mat, input_mat, delta_t):
 
         transition_mat = linalg.expm(sys_mat * delta_t)
-
-
 
         control_mat = np.zeros(shape=transition_mat.shape)
         for row in range(sys_mat.shape[0]):
