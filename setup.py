@@ -2,8 +2,8 @@ from setuptools import setup
 
 setup(name='trackingfilters',
       version='0.1',
-      description='Collection of Tracking Filters Commonly Used in Signal Processing',
-      url='http://github.com/storborg/funniest',
+      description='Trackig Filters',
+      url='https://github.com/johnsoong216/trackingfilters',
       author='johnsoong216',
       author_email='johnsoong216@hotmail.com',
       license='MIT',
