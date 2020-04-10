@@ -3,4 +3,4 @@
 
 
 ### Installation
-- pip install https://github.com/johnsoong216/trackingfilters.git
+- pip install git+https://github.com/johnsoong216/trackingfilters.git
