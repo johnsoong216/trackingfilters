@@ -8,4 +8,7 @@ setup(name='trackingfilters',
       author_email='johnsoong216@hotmail.com',
       license='MIT',
       packages=['trackingfilters'],
+      install_requires=[
+            'numpy', 'scipy'
+      ],
       zip_safe=False)
