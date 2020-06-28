@@ -6,3 +6,6 @@ class LinKalmanException(Exception):
 
 class ExtKalmanException(Exception):
     pass
+
+class UnscentedKalmanException(Exception):
+    pass

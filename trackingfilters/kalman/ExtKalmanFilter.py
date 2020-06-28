@@ -56,7 +56,7 @@ class ExtKalmanFilter(BaseKalmanFilter):
             self.step_update(measure)
 
     def step_update(self, measure_vec, cur_state_vec=None, cur_state_cov_mat=None, transition_func=None,
-                    observation_func=None, control_mat=None, control_vec=None, measure_noise_mat=None,
+                    observation_func=None, measure_noise_mat=None,
                     process_noise_mat=None):
 
         self.update_external_params(cur_state_vec, cur_state_cov_mat, transition_func, observation_func, measure_noise_mat,
@@ -169,3 +169,61 @@ class ExtKalmanFilter(BaseKalmanFilter):
 
             J_mat[:, i] = ((func(vec_1) - func(vec_2)) / (2 * h)).flatten()
         return J_mat
+
+    @staticmethod
+    def cov_extrapolation(cur_cov_mat, transition_mat, process_noise_mat):
+        extrapolate_cov_mat = np.linalg.multi_dot([transition_mat, cur_cov_mat, transition_mat.transpose()]) + \
+                              process_noise_mat
+        return extrapolate_cov_mat
+
+    @staticmethod
+    def calc_kalman_gain(extrapolate_cov_mat, observation_mat, measure_noise_mat):
+        """
+        observation_mat Z * X
+        extrapolate_cov_mat  X * X
+        measure_noise_mat Z * Z
+        """
+
+        kalman_gain_mat = np.linalg.multi_dot([
+            extrapolate_cov_mat,
+            observation_mat.transpose(),
+            np.linalg.inv(
+                np.linalg.multi_dot(
+                    [observation_mat, extrapolate_cov_mat, observation_mat.T]) + \
+                measure_noise_mat
+            )]
+        )
+        return kalman_gain_mat
+
+    @staticmethod
+    def cov_update(extrapolate_cov_mat, kalman_gain_mat, observation_mat, measure_noise_mat):
+        """
+        Kalman Gain X * Z
+        Observation Z * X
+        Identity X * X
+        Previous Cov Mat  X * X
+        Measure Noise Z * 1
+
+        """
+
+        identity_mat = np.eye(kalman_gain_mat.shape[0])
+
+        first_part = np.subtract(identity_mat, np.dot(kalman_gain_mat, observation_mat))
+        next_state_cov_mat = np.linalg.multi_dot([first_part, extrapolate_cov_mat, first_part.transpose()]) + \
+                             np.linalg.multi_dot([kalman_gain_mat, measure_noise_mat, kalman_gain_mat.transpose()])
+
+        return next_state_cov_mat
+
+    @staticmethod
+    def measure_extrapolation(cur_state_vec, observation_mat, measure_noise_vec):
+        """
+        Dimension:
+        State Vec n * 1
+        Observation Matrix z * n
+        Noise Vec z * 1
+        """
+        measure_vec = np.dot(observation_mat, cur_state_vec) + measure_noise_vec
+        return measure_vec
+
+
+
