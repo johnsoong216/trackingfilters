@@ -11,5 +11,5 @@
 - pip install git+https://github.com/johnsoong216/trackingfilters.git
 
 ### References
-https://www.kalmanfilter.net/default.aspx
-https://www.seas.harvard.edu/courses/cs281/papers/unscented.pdf
+https://www.kalmanfilter.net/default.aspx <br>
+https://www.seas.harvard.edu/courses/cs281/papers/unscented.pdf <br>
