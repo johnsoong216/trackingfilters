@@ -62,7 +62,8 @@ class ExtKalmanFilter(BaseKalmanFilter):
         self.update_external_params(cur_state_vec, cur_state_cov_mat, transition_func, observation_func, measure_noise_mat,
                                     process_noise_mat)
 
-        self.func_check(self.observation_func, measure_vec, self.cur_state_vec)
+        # print(self.cur_state_vec.shape)
+        # self.func_check(self.observation_func, measure_vec, self.cur_state_vec.shape)
 
         try:
             extrapolate_state_vec, extrapolate_cov_mat, kalman_gain_mat = self.extrapolate(
@@ -104,7 +105,10 @@ class ExtKalmanFilter(BaseKalmanFilter):
 
     @staticmethod
     def func_check(func, input_vec, output_vec_dim):
-        if func(input_vec).shape != output_vec_dim:
+        # print(func(input_vec).shape)
+        # print(output_vec_dim)
+        # print("Dimensionality")
+        if np.any(func(input_vec).shape != output_vec_dim):
             raise ExtKalmanException("Function Input/Output Size has a mismatch")
 
     def update_external_params(self, cur_state_vec, cur_state_cov_mat, transition_func, observation_func, measure_noise_mat,
@@ -129,14 +133,14 @@ class ExtKalmanFilter(BaseKalmanFilter):
             self.process_noise_mat = process_noise_mat
 
     @staticmethod
-    def state_extrapolation(cur_state_vec, transition_func):
+    def state_extrapolation(cur_state_vec, transition_mat):
         """
         Function extraploates state_vec from time step t to time step t + 1, cur_state_vec(t,t), next_state_vec(t+1, t)
         Variable Dimensions:
         cur_state_vec: n * 1
         transition_mat: n * n
         """
-        extrapolate_state_vec = transition_func(cur_state_vec)  # + np.dot(control_mat, control_vec)
+        extrapolate_state_vec = np.dot(transition_mat, cur_state_vec)  # + np.dot(control_mat, control_vec)
         return extrapolate_state_vec
 
     @staticmethod
@@ -155,18 +159,15 @@ class ExtKalmanFilter(BaseKalmanFilter):
 
     @staticmethod
     def jacobian_mat(func, state_vec):
-        J_mat = np.zeros(shape=(len(state_vec), len(state_vec)))
+        J_mat = np.zeros(shape=(func(state_vec).shape[0], state_vec.shape[0]))
 
         h = 10 ** -6
-
+        vec_1 = state_vec.copy()
+        vec_2 = state_vec.copy()
         # Centred Difference Approach
-        for i in range(len(state_vec)):
-            vec_1 = state_vec.copy()
-            vec_2 = state_vec.copy()
-
+        for i in range(J_mat.shape[0]):
             vec_1[i][0] = state_vec[i][0] + h
             vec_2[i][0] = state_vec[i][0] - h
-
             J_mat[:, i] = ((func(vec_1) - func(vec_2)) / (2 * h)).flatten()
         return J_mat
 
@@ -183,7 +184,9 @@ class ExtKalmanFilter(BaseKalmanFilter):
         extrapolate_cov_mat  X * X
         measure_noise_mat Z * Z
         """
-
+        # print(extrapolate_cov_mat.shape, "Cov Mat")
+        # print(observation_mat.shape, "Observation Mat")
+        # print(measure_noise_mat.shape, "Measure Noise Mat")
         kalman_gain_mat = np.linalg.multi_dot([
             extrapolate_cov_mat,
             observation_mat.transpose(),

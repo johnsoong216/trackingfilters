@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.linalg as sla
+import warnings
 from trackingfilters.kalman.BaseKalman import BaseKalmanFilter
 from trackingfilters.exceptions import UnscentedKalmanException
 
@@ -7,7 +8,7 @@ from trackingfilters.exceptions import UnscentedKalmanException
 class UnscentedKalmanFilter(BaseKalmanFilter):
 
     def __init__(self, init_state_vec, init_state_cov_mat, process_noise_mat,
-                 measure_noise_mat, transition_func, observation_func, alpha, beta, kappa):
+                 measure_noise_mat, transition_func, observation_func, alpha=10**-3, beta=2, kappa=0):
 
         super(UnscentedKalmanFilter, self).__init__(init_state_vec=init_state_vec,
                                                     init_state_cov_mat=init_state_cov_mat,
@@ -56,6 +57,13 @@ class UnscentedKalmanFilter(BaseKalmanFilter):
     def predict(self, extrapolate_state_vec, extrapolate_measure_vec, extrapolate_cov_mat, measure_vec,
                 kalman_gain_mat, measure_cov_mat):
 
+        # print(extrapolate_state_vec.shape, "extrapolate state vec")
+        # print(extrapolate_measure_vec.shape, "extrapolate measure vec")
+        # print(kalman_gain_mat, "kalman gain mat")
+        # print(measure_cov_mat, "measure cov mat")
+        # print(extrapolate_cov_mat, "extrapolate_cov_mat")
+        # sys.exit()
+
         next_state_vec = UnscentedKalmanFilter.state_update(extrapolate_state_vec, extrapolate_measure_vec, measure_vec, kalman_gain_mat)
         next_state_cov_mat = UnscentedKalmanFilter.cov_update(extrapolate_cov_mat, measure_cov_mat, kalman_gain_mat)
         return next_state_vec, next_state_cov_mat
@@ -76,7 +84,7 @@ class UnscentedKalmanFilter(BaseKalmanFilter):
         self.update_external_params(cur_state_vec, cur_state_cov_mat, transition_func, observation_func, measure_noise_mat,
                                     process_noise_mat)
 
-        self.func_check(self.observation_func, measure_vec, self.cur_state_vec)
+        # self.func_check(self.observation_func, measure_vec, self.cur_state_vec)
 
         try:
             extrapolate_state_vec, extrapolate_measure_vec, extrapolate_cov_mat, kalman_gain_mat, measure_cov_mat = self.extrapolate(
@@ -159,9 +167,13 @@ class UnscentedKalmanFilter(BaseKalmanFilter):
         cur_state_dim = cur_state_vec.shape[0]
         sigma_mat = np.float64(np.repeat(cur_state_vec, sigma_dim, axis=1))
         scale_mat = sla.sqrtm(cur_cov_mat * (cur_state_dim + scaling_param))
+        # print(scale_mat)
+        # print(cur_cov_mat)
+        # print(scale_mat)
 
         sigma_mat[:, 1:cur_state_dim + 1] += scale_mat
         sigma_mat[:, cur_state_dim + 1:] -= scale_mat
+        # print(sigma_mat)
         return sigma_mat
 
     @staticmethod
@@ -175,12 +187,13 @@ class UnscentedKalmanFilter(BaseKalmanFilter):
 
         for individual_vec in range(extrapolate_state_mat.shape[1]):
             extrapolate_state_vec += (state_weight[individual_vec] * extrapolate_state_mat[:, individual_vec]).reshape(-1, 1)
-
+        # print(extrapolate_state_mat, "Extrapolate state mat")
+        # print(extrapolate_state_vec)
         return extrapolate_state_vec, extrapolate_state_mat
 
     @staticmethod
     def cov_extrapolation(cov_weight, extrapolate_state_mat, extrapolate_state_vec, process_noise_mat):
-        extrapolate_cov_mat = np.zeros(shape=(len(cov_weight), len(cov_weight)))
+        extrapolate_cov_mat = np.zeros(shape=(extrapolate_state_mat.shape[0], extrapolate_state_mat.shape[0]))
         for idx, weight in enumerate(cov_weight):
             temp_diff = extrapolate_state_mat[:, idx].reshape(-1, 1) - extrapolate_state_vec
             extrapolate_cov_mat += weight * (temp_diff @ temp_diff.T)
@@ -188,8 +201,7 @@ class UnscentedKalmanFilter(BaseKalmanFilter):
 
     @staticmethod
     def measure_extrapolation(extrapolate_state_mat, observation_func, state_weight):
-
-        measure_dim = observation_func(extrapolate_state_mat[:, 0]).shape[0]
+        measure_dim = observation_func((extrapolate_state_mat[:, 0]).reshape(-1, 1)).shape[0]
 
         extrapolate_measure_mat = np.zeros(shape=(measure_dim, extrapolate_state_mat.shape[1]))
         extrapolate_measure_vec = np.zeros(shape=(measure_dim, 1))
@@ -207,29 +219,47 @@ class UnscentedKalmanFilter(BaseKalmanFilter):
     def calc_unscented_cov_mat(cov_weight, extrapolate_state_mat, extrapolate_measure_mat, extrapolate_state_vec,
                                extrapolate_measure_vec, measure_noise_mat):
 
-        measure_cov_mat = np.zeros(shape=(len(cov_weight), len(cov_weight)))  # Measure Variance
-        state_measure_cov_mat = np.zeros(shape=(len(cov_weight), len(cov_weight)))  # Measure State Covariance
+        measure_cov_mat = np.zeros(shape=(extrapolate_measure_vec.shape[0], extrapolate_measure_vec.shape[0])) # Measure Variance
+        state_measure_cov_mat = np.zeros(shape=(extrapolate_measure_vec.shape[0], extrapolate_state_vec.shape[0]))    # Measure State Covariance
+        # print(measure_cov_mat.shape)
+        # print(state_measure_cov_mat.shape)
 
         for idx, weight in enumerate(cov_weight):
             state_diff = extrapolate_state_mat[:, idx].reshape(-1, 1) - extrapolate_state_vec
             measure_diff = extrapolate_measure_mat[:, idx].reshape(-1, 1) - extrapolate_measure_vec
 
+            # print("State")
+            # # print(extrapolate_state_vec)
+            # # print(extrapolate_state_mat[:, idx].reshape(-1, 1))
+            # print(state_diff)
+            #
+            # print("Measure")
+            # # print(extrapolate_measure_vec)
+            # # print(extrapolate_measure_mat[:, idx].reshape(-1, 1))
+            # print(measure_diff)
+
+
             measure_cov_mat += weight * (measure_diff @ measure_diff.T)
-            state_measure_cov_mat += weight * (state_diff @ measure_diff.T)
+            state_measure_cov_mat += weight * (measure_diff @ state_diff.T)
+
 
         measure_cov_mat += measure_noise_mat
         return measure_cov_mat, state_measure_cov_mat
 
     @staticmethod
     def calc_kalman_gain(measure_cov_mat, state_measure_cov_mat):
+        if not np.all(measure_cov_mat.shape == state_measure_cov_mat.shape):
+            raise UnscentedKalmanException(f"The dimension of measure covariance matrix: {measure_cov_mat.shape} is differrent from the dimension of state measure covariance matrix: {state_measure_cov_mat.shape}. Measurement Dimension must be equal to State Dimension in Unscented Kalman Filters")
         return state_measure_cov_mat @ sla.inv(measure_cov_mat)
 
     @staticmethod
     def state_update(extrapolate_state_vec, extrapolate_measure_vec, measure_vec, kalman_gain_mat):
         next_state_vec = extrapolate_state_vec + kalman_gain_mat @ (measure_vec - extrapolate_measure_vec)
+        # print(next_state_vec, "next state vec")
         return next_state_vec
     
     @staticmethod
     def cov_update(extrapolate_cov_mat, measure_cov_mat, kalman_gain):
         next_state_cov_mat = extrapolate_cov_mat - kalman_gain @ measure_cov_mat @ kalman_gain.T
+        # print(next_state_cov_mat, "next state cov mat")
         return next_state_cov_mat

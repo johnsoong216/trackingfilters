@@ -31,6 +31,10 @@ class BaseKalmanFilter:
         self.cur_state_vec = next_state_vec
         self.cur_state_cov_mat = next_state_cov_mat
         self.state_count += 1
+
+        # print(next_state_vec)
+        # print(next_state_cov_mat)
+
         self.agg_state_vec = np.concatenate(
             [self.agg_state_vec, next_state_vec.reshape(1, next_state_vec.shape[0], next_state_vec.shape[1])])
         self.agg_state_cov_mat = np.concatenate([self.agg_state_cov_mat,
